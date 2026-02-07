@@ -1,10 +1,10 @@
-// Agrega al inicio del archivo:
 const fetch = require('node-fetch');
 
 async function deepseekAnalyzeCvText(inputText) {
     const url = process.env.DEEPSEEK_API_URL || "https://api.deepseek.com/v1/chat/completions";
     const key = process.env.DEEPSEEK_API_KEY;
   
+    // Si no hay API key, usar fallback inmediatamente
     if (!key) {
         console.warn("⚠️ Missing DEEPSEEK_API_KEY, using fallback analysis");
         return getFallbackAnalysis(inputText);
@@ -29,6 +29,7 @@ async function deepseekAnalyzeCvText(inputText) {
     };
   
     try {
+        console.log("Calling DeepSeek API...");
         const resp = await fetch(url, {
           method: "POST",
           headers: {
@@ -41,7 +42,7 @@ async function deepseekAnalyzeCvText(inputText) {
         const rawText = await resp.text();
         
         if (!resp.ok) {
-          console.error(`DeepSeek API error ${resp.status}:`, rawText);
+          console.error(`DeepSeek API error ${resp.status}:`, rawText.substring(0, 200));
           return getFallbackAnalysis(inputText);
         }
       
@@ -54,15 +55,23 @@ async function deepseekAnalyzeCvText(inputText) {
         }
       
         const content = data?.choices?.[0]?.message?.content;
-        if (!content) return getFallbackAnalysis(inputText);
+        if (!content) {
+            console.error("DeepSeek returned empty content");
+            return getFallbackAnalysis(inputText);
+        }
       
         // 1) parse directo
         try {
-          return JSON.parse(content);
+          const result = JSON.parse(content);
+          console.log("DeepSeek analysis successful");
+          return result;
         } catch {
           // 2) fallback: extraer primer bloque JSON { ... }
           const m = String(content).match(/\{[\s\S]*\}/);
-          if (!m) return getFallbackAnalysis(inputText);
+          if (!m) {
+              console.error("No JSON found in DeepSeek response");
+              return getFallbackAnalysis(inputText);
+          }
           return JSON.parse(m[0]);
         }
     } catch (error) {
