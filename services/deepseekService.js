@@ -41,7 +41,8 @@ function localCvAnalysis(text) {
     score: Math.min(10, Math.max(5, experience)),
     red_flags: text.length < 50 ? ["CV muy breve"] : [],
     summary: `Profesional con ${experience} años de experiencia en ${industry}. Análisis local.`,
-    next_steps: ["Para análisis más detallado, completa tu perfil en Petrolink"]
+    next_steps: ["Para análisis más detallado, completa tu perfil en Petrolink"],
+    _source: "local-fallback"
   };
 }
 
@@ -121,7 +122,7 @@ async function deepseekAnalyzeCvText(inputText) {
     try {
       const result = JSON.parse(content);
       console.log("📊 Successfully parsed JSON response");
-      return result;
+      return { ...result, _source: "deepseek" };
     } catch (parseError) {
       console.error("❌ JSON Parse error:", parseError.message);
       // Intentar extraer JSON
