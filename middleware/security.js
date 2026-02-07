@@ -1,9 +1,17 @@
 const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
+
+/**
+ * Generate UUID v4 using native crypto
+ */
+function uuidv4() {
+  return crypto.randomUUID();
+}
 
 /**
  * Validate API Key Middleware
@@ -89,25 +97,26 @@ async function logRequest(req, res, next) {
   next();
 }
 
+/**
+ * Hash API key with SHA-256
+ */
 function hashApiKey(apiKey) {
-  const crypto = require('crypto');
   return crypto
     .createHash('sha256')
-    .update(apiKey + process.env.API_KEY_SALT)
+    .update(apiKey + (process.env.API_KEY_SALT || ''))
     .digest('hex');
 }
 
+/**
+ * Rate limit checker (simplified - implement Redis later)
+ */
 async function checkRateLimit(clientId) {
-  // Implement Redis-based rate limiting
+  // TODO: Implement Redis-based rate limiting
   // For now, return false (not rate limited)
   return false;
 }
-
-const { v4: uuidv4 } = require('uuid');
 
 module.exports = {
   validateApiKey,
   logRequest,
 };
-
-
