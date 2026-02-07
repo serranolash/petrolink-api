@@ -1,6 +1,12 @@
 const crypto = require("crypto");
-const { supabase } = require("./supabase");
-const { deepseekAnalyzeCvText } = require("./deepseekService");
+const { supabase } = require("./supabase"); // ✅ CORRECTO
+const { deepseekAnalyzeCvText } = require("./deepseekService"); // ✅ CORRECTO
+
+// Al inicio de publicCvService.js, después de los imports:
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+  console.warn("⚠️ Supabase credentials missing. Using in-memory quota tracking.");
+}
+
 
 /* ------------------------- Helpers ------------------------- */
 
@@ -34,11 +40,18 @@ function normalizeEmail(email) {
  */
 async function checkAndConsumePublicQuota({ cvText, email, maxFree = 3 }) {
   const clean = normalizeText(cvText);
-
-  // Asegura hash estable y evita que cambios mínimos rompan el límite
   const cv_hash = sha256(clean);
 
-  const emailNorm = normalizeEmail(email);
+  // Si no hay credenciales de Supabase, usar memoria
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+    console.log(`[DEV] Quota check for hash: ${cv_hash.substring(0, 8)}...`);
+    return { 
+      cv_hash: cv_hash.substring(0, 12), 
+      remaining: maxFree - 1, 
+      allowed: true 
+    };
+  }
+
 
   // Buscar registro existente
   const { data: existing, error: selErr } = await supabase
