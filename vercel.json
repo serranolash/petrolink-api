@@ -12,12 +12,6 @@
         "dest": "api/index.js"
       }
     ],
-    "functions": {
-      "api/index.js": {
-        "includeFiles": "docs/**",
-        "maxDuration": 10
-      }
-    },
-    "installCommand": "npm ci --force",
-    "buildCommand": "rm -rf node_modules && npm install"
+    "installCommand": "npm install",
+    "buildCommand": ""
   }
