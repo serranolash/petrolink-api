@@ -1,6 +1,10 @@
 const crypto = require("crypto");
+const path = require("path");
+const fs = require("fs");
 
 console.log("🔄 Loading publicCvService.js...");
+console.log("Current dir:", __dirname);
+console.log("Files in services dir:", fs.readdirSync(__dirname));
 
 /**
  * Servicio público de análisis de CV
@@ -45,72 +49,127 @@ async function checkAndConsumePublicQuota({ cvText, email, maxFree = 3 }) {
 }
 
 /**
- * Análisis de CV público con DEBUG
+ * Análisis de CV público - VERSIÓN VERCEL COMPATIBLE
  */
 async function analyzePublicCvText(cvText) {
   console.log("🔍 analyzePublicCvText called, text length:", cvText?.length);
   
   try {
-    console.log("1. Attempting to require deepseekService...");
+    console.log("=== VERCEL DEBUG ===");
+    console.log("1. __dirname:", __dirname);
+    console.log("2. Process cwd:", process.cwd());
     
-    // Importación explícita con logging
-    const deepseekPath = require.resolve("./deepseekService");
-    console.log("2. deepseekService path:", deepseekPath);
+    // Intentar múltiples rutas posibles
+    const possiblePaths = [
+      path.join(__dirname, 'deepseekService.js'),
+      path.join(process.cwd(), 'services', 'deepseekService.js'),
+      path.join(__dirname, '..', 'services', 'deepseekService.js'),
+      './deepseekService.js',
+      'deepseekService.js'
+    ];
     
-    const { deepseekAnalyzeCvText } = require("./deepseekService");
-    console.log("3. Function loaded:", typeof deepseekAnalyzeCvText);
-    
-    console.log("4. Calling deepseekAnalyzeCvText...");
-    const result = await deepseekAnalyzeCvText(cvText);
-    console.log("5. deepseekAnalyzeCvText returned:", typeof result);
-    
-    // Validar resultado
-    if (!result || typeof result !== 'object') {
-      throw new Error("Invalid response from DeepSeek service");
+    console.log("3. Checking paths:");
+    for (const p of possiblePaths) {
+      console.log(`   - ${p}: ${fs.existsSync(p) ? 'EXISTS' : 'NOT FOUND'}`);
     }
     
-    console.log("✅ Analysis successful, returning result");
+    // Encontrar la ruta correcta
+    let deepseekPath;
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        deepseekPath = p;
+        console.log(`4. Found at: ${deepseekPath}`);
+        break;
+      }
+    }
+    
+    if (!deepseekPath) {
+      throw new Error("deepseekService.js not found in any path");
+    }
+    
+    // Limpiar cache y requerir
+    delete require.cache[require.resolve(deepseekPath)];
+    const deepseekModule = require(deepseekPath);
+    
+    console.log("5. Module loaded, keys:", Object.keys(deepseekModule));
+    
+    if (!deepseekModule.deepseekAnalyzeCvText) {
+      throw new Error("deepseekAnalyzeCvText function not exported");
+    }
+    
+    console.log("6. Calling deepseekAnalyzeCvText...");
+    const result = await deepseekModule.deepseekAnalyzeCvText(cvText);
+    
+    console.log("7. Analysis successful");
     return result;
     
   } catch (error) {
     console.error("❌ ERROR in analyzePublicCvText:", {
       message: error.message,
-      stack: error.stack,
-      code: error.code
+      stack: error.stack
     });
     
-    // Fallback mejorado
-    const text = normalizeText(cvText);
-    const textLower = text.toLowerCase();
-    
-    // Análisis básico de fallback
-    let industry = "General";
-    if (textLower.includes('react') || textLower.includes('node') || textLower.includes('javascript')) {
-      industry = "IT";
-    }
-    
-    let experience = 3;
-    const yearsMatch = textLower.match(/(\d+)\s*años?/i);
-    if (yearsMatch) experience = parseInt(yearsMatch[1]);
-    
-    let seniority = "Mid-Level";
-    if (experience >= 5) seniority = "Senior";
-    else if (experience <= 2) seniority = "Junior";
-    
-    const commonSkills = ['react', 'node', 'javascript', 'typescript', 'docker', 'aws', 'kubernetes'];
-    const detectedSkills = commonSkills.filter(skill => textLower.includes(skill));
-    
-    return {
-      industry: industry,
-      role_seniority: seniority,
-      top_roles: ["Desarrollador", "Ingeniero de Software", "Especialista Técnico"],
-      skills: detectedSkills,
-      score: Math.min(10, Math.max(1, Math.floor(experience * 1.2))),
-      red_flags: [`Fallback analysis (${error.message.substring(0, 50)})`],
-      summary: `Análisis de CV completado. ${experience} años de experiencia detectados.`,
-      next_steps: ["Completar información técnica", "Agregar logros cuantificables"]
-    };
+    // Fallback robusto
+    return getFallbackAnalysis(cvText);
   }
+}
+
+/**
+ * Análisis de fallback mejorado
+ */
+function getFallbackAnalysis(text) {
+  console.log("🔄 Using fallback analysis");
+  
+  const textLower = normalizeText(text).toLowerCase();
+  
+  // Análisis mejorado
+  let industry = "General";
+  const industryKeywords = {
+    "IT": ["react", "node", "javascript", "typescript", "python", "java", "developer", "software"],
+    "Energía": ["oil", "gas", "petrol", "energía", "refinación", "pozo"],
+    "Finanzas": ["financiero", "banca", "inversión", "contable", "auditor"],
+    "Salud": ["enfermer", "médico", "doctor", "salud", "hospital"]
+  };
+  
+  for (const [ind, keywords] of Object.entries(industryKeywords)) {
+    if (keywords.some(keyword => textLower.includes(keyword))) {
+      industry = ind;
+      break;
+    }
+  }
+  
+  let experience = 3;
+  const yearsMatch = textLower.match(/(\d+)\s*(años|years|año)/i);
+  if (yearsMatch) experience = parseInt(yearsMatch[1]);
+  
+  let seniority = "Mid-Level";
+  if (experience >= 5) seniority = "Senior";
+  else if (experience <= 2) seniority = "Junior";
+  
+  const skillKeywords = [
+    'react', 'node', 'javascript', 'typescript', 'python', 'java',
+    'docker', 'aws', 'kubernetes', 'postgresql', 'mongodb', 'mysql',
+    'express', 'vue', 'angular', 'git', 'linux', 'sql'
+  ];
+  
+  const detectedSkills = skillKeywords.filter(skill => textLower.includes(skill));
+  
+  return {
+    industry: industry,
+    role_seniority: seniority,
+    top_roles: industry === "IT" 
+      ? ["Desarrollador Full Stack", "Ingeniero de Software", "Arquitecto de Soluciones"]
+      : ["Profesional", "Especialista", "Consultor"],
+    skills: detectedSkills.length > 0 ? detectedSkills : ["Habilidades técnicas"],
+    score: Math.min(10, Math.max(5, Math.floor(experience * 1.5))),
+    red_flags: textLower.length < 100 ? ["CV muy breve - proporciona más detalles"] : [],
+    summary: `Análisis local: ${experience} años en ${industry}. ${detectedSkills.length} habilidades detectadas.`,
+    next_steps: [
+      "Completa tu perfil en Petrolink para análisis más detallado",
+      "Incluye métricas y logros específicos",
+      "Detalla proyectos y responsabilidades"
+    ]
+  };
 }
 
 console.log("✅ publicCvService.js loaded successfully");
