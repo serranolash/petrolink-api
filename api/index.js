@@ -164,4 +164,54 @@ app.use((err, req, res, next) => {
   });
 });
 
+
+// Agrega esto para debug
+app.get('/diagnostic', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  
+  const files = [
+    '../utils/textProcessors.js',
+    '../services/cvParser.js',
+    '../services/aiService.js',
+    '../services/deepseekService.js',
+    '../services/publicCvService.js'
+  ];
+  
+  const results = files.map(filePath => {
+    const fullPath = path.join(__dirname, filePath);
+    const exists = fs.existsSync(fullPath);
+    
+    let syntaxOk = false;
+    let moduleType = 'unknown';
+    
+    if (exists) {
+      try {
+        const content = fs.readFileSync(fullPath, 'utf8');
+        syntaxOk = true;
+        
+        if (content.includes('export ') && content.includes('import ')) {
+          moduleType = 'ESM';
+        } else if (content.includes('module.exports') || content.includes('require(')) {
+          moduleType = 'CommonJS';
+        }
+      } catch (err) {
+        syntaxOk = false;
+      }
+    }
+    
+    return {
+      file: filePath,
+      exists,
+      syntaxOk,
+      moduleType
+    };
+  });
+  
+  res.json({
+    nodeVersion: process.version,
+    files: results,
+    timestamp: new Date().toISOString()
+  });
+});
 module.exports = app;
