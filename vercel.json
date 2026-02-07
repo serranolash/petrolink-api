@@ -1,11 +1,23 @@
 {
     "version": 2,
-    "builds": [{ "src": "api/index.js", "use": "@vercel/node" }],
-    "routes": [{ "src": "/(.*)", "dest": "api/index.js" }],
+    "builds": [
+      {
+        "src": "api/index.js",
+        "use": "@vercel/node"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/(.*)",
+        "dest": "api/index.js"
+      }
+    ],
     "functions": {
       "api/index.js": {
-        "includeFiles": "docs/**"
+        "includeFiles": "docs/**",
+        "maxDuration": 10
       }
-    }
+    },
+    "installCommand": "npm ci --force",
+    "buildCommand": "rm -rf node_modules && npm install"
   }
-  
