@@ -7,8 +7,12 @@ const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const path = require("path");
 const fs = require("fs");
+const ENABLE_DOCS = process.env.ENABLE_DOCS !== "false";
+
 
 // Swagger (safe)
+
+if (ENABLE_DOCS) {
 let swaggerDocument = null;
 try {
   const swaggerPath = path.join(__dirname, "..", "docs", "openapi.yaml"); // ✅ absoluto
@@ -30,6 +34,9 @@ if (swaggerDocument) {
   app.get("/docs", (req, res) => res.status(200).send("Docs not available."));
 }
 
+} else {
+    app.get("/docs", (req, res) => res.status(404).send("Docs disabled"));
+  }
 
 const { validateApiKey, logRequest } = require("../middleware/security.js");
 const { rateLimit } = require("../middleware/rateLimit.js");
