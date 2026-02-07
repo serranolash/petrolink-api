@@ -41,6 +41,11 @@ try {
 const app = express();
 
 app.use(cors({ origin: "*", credentials: false }));
+// Al inicio, después de app.use(cors(...))
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
 app.use(express.json({ limit: "5mb" }));
 
 // ========== ENDPOINTS PÚBLICOS ==========
@@ -211,6 +216,31 @@ app.use((error, req, res, next) => {
     code: "SERVER_ERROR",
     message: "Error interno del servidor",
     timestamp: new Date().toISOString()
+  });
+});
+
+app.get("/env-check", (req, res) => {
+  // Obtener todas las variables DeepSeek
+  const deepseekVars = {};
+  Object.keys(process.env).forEach(key => {
+    if (key.includes('DEEPSEEK') || key.includes('SUPABASE')) {
+      const value = process.env[key];
+      deepseekVars[key] = {
+        exists: !!value,
+        length: value?.length,
+        preview: value ? `${value.substring(0, 4)}...${value.substring(value.length - 4)}` : null
+      };
+    }
+  });
+  
+  res.json({
+    timestamp: new Date().toISOString(),
+    nodeVersion: process.version,
+    environment: process.env.NODE_ENV,
+    variables: deepseekVars,
+    deepseekService: {
+      loaded: typeof require !== 'undefined' ? true : false
+    }
   });
 });
 
