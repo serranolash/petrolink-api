@@ -1,10 +1,56 @@
-console.log("🔄 Loading deepseekService.js...");
+console.log("=== 🚨 DEEPSEEK SERVICE STARTING 🚨 ===");
+console.log("📅 Timestamp:", new Date().toISOString());
+console.log("📍 File:", __filename);
+
+/**
+ * Análisis local como fallback
+ */
+function localCvAnalysis(text) {
+  console.log("🔄 Using local analysis fallback");
+  
+  const textLower = (text || "").toLowerCase();
+  
+  // Industria
+  let industry = "General";
+  if (textLower.includes('react') || textLower.includes('node') || textLower.includes('javascript')) {
+    industry = "IT";
+  } else if (textLower.includes('oil') || textLower.includes('gas')) {
+    industry = "Energía";
+  }
+  
+  // Experiencia
+  let experience = 3;
+  const yearsMatch = textLower.match(/(\d+)\s*(años|years)/);
+  if (yearsMatch) experience = parseInt(yearsMatch[1]);
+  
+  // Seniority
+  let seniority = "Mid-Level";
+  if (experience >= 5) seniority = "Senior";
+  else if (experience <= 2) seniority = "Junior";
+  
+  // Skills
+  const skillsList = ['react', 'node', 'javascript', 'typescript', 'python', 'docker', 
+                     'aws', 'kubernetes', 'postgresql', 'mongodb'];
+  const detectedSkills = skillsList.filter(skill => textLower.includes(skill));
+  
+  return {
+    industry: industry,
+    role_seniority: seniority,
+    top_roles: ["Desarrollador Full Stack", "Ingeniero de Software", "Especialista Técnico"],
+    skills: detectedSkills.length > 0 ? detectedSkills : ["Habilidades técnicas"],
+    score: Math.min(10, Math.max(5, experience)),
+    red_flags: text.length < 50 ? ["CV muy breve"] : [],
+    summary: `Profesional con ${experience} años de experiencia en ${industry}. Análisis local.`,
+    next_steps: ["Para análisis más detallado, completa tu perfil en Petrolink"]
+  };
+}
 
 /**
  * Servicio DeepSeek - Versión robusta
  */
 async function deepseekAnalyzeCvText(inputText) {
-  console.log("🤖 deepseekAnalyzeCvText called, input length:", inputText?.length);
+  console.log("=== 🤖 DEEPSEEK FUNCTION CALLED 🤖 ===");
+  console.log("📝 Input length:", inputText?.length);
   
   // Obtener configuración
   const url = process.env.DEEPSEEK_API_URL || "https://api.deepseek.com/v1/chat/completions";
@@ -52,8 +98,7 @@ async function deepseekAnalyzeCvText(inputText) {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${key}`
       },
-      body: JSON.stringify(payload),
-      timeout: 10000
+      body: JSON.stringify(payload)
     });
     
     console.log("📥 Response status:", response.status);
@@ -96,49 +141,7 @@ async function deepseekAnalyzeCvText(inputText) {
   }
 }
 
-/**
- * Análisis local como fallback
- */
-function localCvAnalysis(text) {
-  console.log("🔄 Using local analysis fallback");
-  
-  const textLower = (text || "").toLowerCase();
-  
-  // Industria
-  let industry = "General";
-  if (textLower.includes('react') || textLower.includes('node') || textLower.includes('javascript')) {
-    industry = "IT";
-  } else if (textLower.includes('oil') || textLower.includes('gas')) {
-    industry = "Energía";
-  }
-  
-  // Experiencia
-  let experience = 3;
-  const yearsMatch = textLower.match(/(\d+)\s*(años|years)/);
-  if (yearsMatch) experience = parseInt(yearsMatch[1]);
-  
-  // Seniority
-  let seniority = "Mid-Level";
-  if (experience >= 5) seniority = "Senior";
-  else if (experience <= 2) seniority = "Junior";
-  
-  // Skills
-  const skillsList = ['react', 'node', 'javascript', 'typescript', 'python', 'docker', 
-                     'aws', 'kubernetes', 'postgresql', 'mongodb'];
-  const detectedSkills = skillsList.filter(skill => textLower.includes(skill));
-  
-  return {
-    industry: industry,
-    role_seniority: seniority,
-    top_roles: ["Desarrollador Full Stack", "Ingeniero de Software", "Especialista Técnico"],
-    skills: detectedSkills.length > 0 ? detectedSkills : ["Habilidades técnicas"],
-    score: Math.min(10, Math.max(5, experience)),
-    red_flags: text.length < 50 ? ["CV muy breve"] : [],
-    summary: `Profesional con ${experience} años de experiencia en ${industry}. Análisis local.`,
-    next_steps: ["Para análisis más detallado, completa tu perfil en Petrolink"]
-  };
-}
-
-console.log("✅ deepseekService.js loaded successfully");
+console.log("=== ✅ DEEPSEEK SERVICE LOADED ✅ ===");
+console.log("Function exported:", typeof deepseekAnalyzeCvText);
 
 module.exports = { deepseekAnalyzeCvText };

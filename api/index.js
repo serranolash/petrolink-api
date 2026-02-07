@@ -40,6 +40,60 @@ try {
 
 const app = express();
 
+// Agrega esto antes de otras rutas
+app.get("/vercel-debug", (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  
+  const info = {
+    timestamp: new Date().toISOString(),
+    nodeVersion: process.version,
+    cwd: process.cwd(),
+    dirname: __dirname,
+    files: {}
+  };
+  
+  // Verificar estructura
+  const dirsToCheck = [
+    '.',
+    'services',
+    '../services',
+    path.join(__dirname, 'services'),
+    path.join(process.cwd(), 'services')
+  ];
+  
+  dirsToCheck.forEach(dir => {
+    try {
+      info.files[dir] = fs.readdirSync(dir);
+    } catch (e) {
+      info.files[dir] = `Error: ${e.message}`;
+    }
+  });
+  
+  // Verificar deepseekService específicamente
+  const pathsToCheck = [
+    'services/deepseekService.js',
+    './services/deepseekService.js',
+    path.join(__dirname, '../services/deepseekService.js'),
+    path.join(process.cwd(), 'services/deepseekService.js')
+  ];
+  
+  info.deepseekPaths = {};
+  pathsToCheck.forEach(p => {
+    info.deepseekPaths[p] = fs.existsSync(p) ? 'EXISTS' : 'NOT FOUND';
+  });
+  
+  // Variables de entorno (ocultar valores completos)
+  info.env = {
+    NODE_ENV: process.env.NODE_ENV,
+    HAS_DEEPSEEK_KEY: !!process.env.DEEPSEEK_API_KEY,
+    HAS_SUPABASE_URL: !!process.env.SUPABASE_URL,
+    DEEPSEEK_KEY_LENGTH: process.env.DEEPSEEK_API_KEY?.length
+  };
+  
+  res.json(info);
+});
+
 app.use(cors({ origin: "*", credentials: false }));
 // Al inicio, después de app.use(cors(...))
 app.use((req, res, next) => {
@@ -244,57 +298,5 @@ app.get("/env-check", (req, res) => {
   });
 });
 
-// Agrega esto antes de otras rutas
-app.get("/vercel-debug", (req, res) => {
-  const fs = require('fs');
-  const path = require('path');
-  
-  const info = {
-    timestamp: new Date().toISOString(),
-    nodeVersion: process.version,
-    cwd: process.cwd(),
-    dirname: __dirname,
-    files: {}
-  };
-  
-  // Verificar estructura
-  const dirsToCheck = [
-    '.',
-    'services',
-    '../services',
-    path.join(__dirname, 'services'),
-    path.join(process.cwd(), 'services')
-  ];
-  
-  dirsToCheck.forEach(dir => {
-    try {
-      info.files[dir] = fs.readdirSync(dir);
-    } catch (e) {
-      info.files[dir] = `Error: ${e.message}`;
-    }
-  });
-  
-  // Verificar deepseekService específicamente
-  const pathsToCheck = [
-    'services/deepseekService.js',
-    './services/deepseekService.js',
-    path.join(__dirname, '../services/deepseekService.js'),
-    path.join(process.cwd(), 'services/deepseekService.js')
-  ];
-  
-  info.deepseekPaths = {};
-  pathsToCheck.forEach(p => {
-    info.deepseekPaths[p] = fs.existsSync(p) ? 'EXISTS' : 'NOT FOUND';
-  });
-  
-  // Variables de entorno (ocultar valores completos)
-  info.env = {
-    NODE_ENV: process.env.NODE_ENV,
-    HAS_DEEPSEEK_KEY: !!process.env.DEEPSEEK_API_KEY,
-    HAS_SUPABASE_URL: !!process.env.SUPABASE_URL,
-    DEEPSEEK_KEY_LENGTH: process.env.DEEPSEEK_API_KEY?.length
-  };
-  
-  res.json(info);
-});
+
 module.exports = app;
