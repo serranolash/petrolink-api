@@ -1,10 +1,9 @@
-import { cleanText, toArray } from "../utils/textProcessors.js";
+const { cleanText, toArray } = require("../utils/textProcessors.js");
 
 /**
  * Parser simple de CVs/perfiles (JSON/texto).
- * Si recibís PDF/DOCX deberías extraer texto con otra capa (no incluido acá).
  */
-export function parseProfile(payload = {}) {
+function parseProfile(payload = {}) {
   // payload.profile se espera en tus ejemplos
   const profile = payload.profile ?? payload;
 
@@ -21,3 +20,5 @@ export function parseProfile(payload = {}) {
     raw: profile,
   };
 }
+
+module.exports = { parseProfile };

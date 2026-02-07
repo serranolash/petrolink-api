@@ -1,11 +1,9 @@
-import crypto from "crypto";
+const crypto = require("crypto");
 
 /**
  * Servicio de IA (MVP).
  * - Modo "mock" (por defecto): genera un análisis heurístico determinístico.
  * - Modo "deepseek": intenta llamar a DEEPSEEK_API_URL con DEEPSEEK_API_KEY (si existe).
- *
- * Nota: Este archivo está pensado para reutilizar concepto de tu Intelligence Hub sin acoplarlo.
  */
 
 function scoreHeuristic(profile) {
@@ -25,7 +23,7 @@ function hashObject(obj) {
   return crypto.createHash("sha256").update(stable).digest("hex");
 }
 
-export async function analyzeProfileAI(profile) {
+async function analyzeProfileAI(profile) {
   const mode = (process.env.AI_PROVIDER || "mock").toLowerCase();
 
   if (mode !== "deepseek") {
@@ -69,40 +67,50 @@ ${JSON.stringify(profile, null, 2)}`;
     temperature: 0.2,
   };
 
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${key}`,
-    },
-    body: JSON.stringify(body),
-  });
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${key}`,
+      },
+      body: JSON.stringify(body),
+    });
 
-  if (!resp.ok) {
-    const txt = await resp.text();
+    if (!resp.ok) {
+      const txt = await resp.text();
+      return {
+        provider: "deepseek",
+        error: `DeepSeek error ${resp.status}: ${txt}`,
+        ...(await analyzeProfileAI({ ...profile, _fallback: true })),
+      };
+    }
+
+    const data = await resp.json();
+    const content = data?.choices?.[0]?.message?.content ?? "{}";
+
+    let parsed = {};
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      // Si vino texto con JSON mezclado, intenta extraer primer bloque
+      const m = content.match(/\{[\s\S]*\}/);
+      if (m) parsed = JSON.parse(m[0]);
+    }
+
     return {
       provider: "deepseek",
-      error: `DeepSeek error ${resp.status}: ${txt}`,
+      request_id: `req_${Date.now()}`,
+      profile_hash: hashObject(profile),
+      ...parsed,
+    };
+  } catch (error) {
+    return {
+      provider: "deepseek",
+      error: `Network error: ${error.message}`,
       ...(await analyzeProfileAI({ ...profile, _fallback: true })),
     };
   }
-
-  const data = await resp.json();
-  const content = data?.choices?.[0]?.message?.content ?? "{}";
-
-  let parsed = {};
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    // Si vino texto con JSON mezclado, intenta extraer primer bloque
-    const m = content.match(/\{[\s\S]*\}/);
-    if (m) parsed = JSON.parse(m[0]);
-  }
-
-  return {
-    provider: "deepseek",
-    request_id: `req_${Date.now()}`,
-    profile_hash: hashObject(profile),
-    ...parsed,
-  };
 }
+
+module.exports = { analyzeProfileAI };

@@ -6,7 +6,7 @@
  * - extraer skills básicos (heurístico)
  */
 
-export function cleanText(input = "") {
+function cleanText(input = "") {
   if (!input) return "";
   return String(input)
     .replace(/\r\n/g, "\n")
@@ -15,7 +15,7 @@ export function cleanText(input = "") {
     .trim();
 }
 
-export function toArray(v) {
+function toArray(v) {
   if (!v) return [];
   if (Array.isArray(v)) return v.filter(Boolean).map(String);
   if (typeof v === "string") {
@@ -25,7 +25,7 @@ export function toArray(v) {
   return [String(v)];
 }
 
-export function uniqueLower(list = []) {
+function uniqueLower(list = []) {
   const seen = new Set();
   const out = [];
   for (const item of list) {
@@ -36,7 +36,7 @@ export function uniqueLower(list = []) {
 }
 
 // Heurística mínima para extraer skills desde texto
-export function extractSkillsFromText(text, dictionary = []) {
+function extractSkillsFromText(text, dictionary = []) {
   const t = (text || "").toLowerCase();
   const found = [];
   for (const skill of dictionary) {
@@ -45,3 +45,11 @@ export function extractSkillsFromText(text, dictionary = []) {
   }
   return uniqueLower(found);
 }
+
+// ✅ CommonJS exports
+module.exports = {
+  cleanText,
+  toArray,
+  uniqueLower,
+  extractSkillsFromText
+};
