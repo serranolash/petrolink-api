@@ -1,61 +1,51 @@
-// services/deepseekService.js - VERSIÓN CORREGIDA
+console.log("🔄 Loading deepseekService.js...");
+
+/**
+ * Servicio DeepSeek - Versión robusta
+ */
 async function deepseekAnalyzeCvText(inputText) {
-  // 1. Obtener variables de TODAS las formas posibles
-  const url = process.env.DEEPSEEK_API_URL || 
-              process.env.NEXT_PUBLIC_DEEPSEEK_API_URL || 
-              "https://api.deepseek.com/v1/chat/completions";
+  console.log("🤖 deepseekAnalyzeCvText called, input length:", inputText?.length);
   
-  const key = process.env.DEEPSEEK_API_KEY || 
-              process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY;
+  // Obtener configuración
+  const url = process.env.DEEPSEEK_API_URL || "https://api.deepseek.com/v1/chat/completions";
+  const key = process.env.DEEPSEEK_API_KEY;
   
-  console.log("🔧 DeepSeek Config:", {
-    url: url.replace(/https?:\/\/[^\/]+/, 'https://***'), // Ocultar dominio
+  console.log("🔧 Config check:", {
+    hasUrl: !!url,
     hasKey: !!key,
     keyLength: key?.length,
-    envKeys: Object.keys(process.env).join(', ')
+    urlPreview: url.replace(/https?:\/\/[^\/]+/, 'https://***')
   });
-
-  // 2. Validación robusta de API key
-  if (!key || key.trim().length < 20) {
-    console.warn("⚠️ Invalid or missing DeepSeek API key. Using local analysis.");
+  
+  // Si no hay key, usar análisis local inmediatamente
+  if (!key || key.trim().length < 10) {
+    console.log("⚠️ No valid API key, using local analysis");
     return localCvAnalysis(inputText);
   }
-
-  // 3. Llamada a API con mejor manejo de errores
+  
   try {
-    console.log("🚀 Calling DeepSeek API...");
+    console.log("🚀 Attempting DeepSeek API call...");
     
     const payload = {
-      model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+      model: "deepseek-chat",
       messages: [
         {
           role: "system",
-          content: `Eres un analista de CV experto. Analiza el siguiente CV y devuelve SOLO un objeto JSON con: 
-          {
-            "industry": "string (industria principal)",
-            "role_seniority": "string (Junior/Mid/Senior/Lead)",
-            "top_roles": ["array", "de", "roles", "sugeridos"],
-            "skills": ["array", "de", "habilidades", "detectadas"],
-            "score": number (1-10),
-            "red_flags": ["array", "de", "problemas"],
-            "summary": "string (resumen en español)",
-            "next_steps": ["array", "de", "recomendaciones"]
-          }
-          No agregues texto fuera del JSON.`
+          content: "You are a CV analyst. Return ONLY valid JSON, no other text. Format: {industry: string, role_seniority: string, top_roles: array, skills: array, score: number, red_flags: array, summary: string, next_steps: array}"
         },
         {
           role: "user",
-          content: inputText.substring(0, 4000) // Limitar tamaño
+          content: `Analyze this CV: ${inputText.substring(0, 1000)}`
         }
       ],
       temperature: 0.3,
-      max_tokens: 1000,
+      max_tokens: 500,
       response_format: { type: "json_object" }
     };
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
+    
+    console.log("📤 Sending request to DeepSeek...");
+    
+    // Usar fetch global (Node.js 18+)
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -63,49 +53,92 @@ async function deepseekAnalyzeCvText(inputText) {
         "Authorization": `Bearer ${key}`
       },
       body: JSON.stringify(payload),
-      signal: controller.signal
+      timeout: 10000
     });
-
-    clearTimeout(timeoutId);
-
+    
+    console.log("📥 Response status:", response.status);
+    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ DeepSeek API Error ${response.status}:`, errorText.substring(0, 200));
+      console.error("❌ API Error:", response.status, errorText.substring(0, 200));
       throw new Error(`API Error ${response.status}`);
     }
-
+    
     const data = await response.json();
-    console.log("✅ DeepSeek Response received");
+    console.log("✅ API Response received");
     
     const content = data?.choices?.[0]?.message?.content;
-    
     if (!content) {
-      console.warn("⚠️ Empty response from DeepSeek");
-      throw new Error("Empty response");
+      throw new Error("Empty response content");
     }
-
-    // Parsear JSON
+    
+    // Parse JSON
     try {
-      const parsed = JSON.parse(content);
-      console.log("📊 DeepSeek analysis successful");
-      return parsed;
+      const result = JSON.parse(content);
+      console.log("📊 Successfully parsed JSON response");
+      return result;
     } catch (parseError) {
-      // Intentar extraer JSON del texto
+      console.error("❌ JSON Parse error:", parseError.message);
+      // Intentar extraer JSON
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         return JSON.parse(jsonMatch[0]);
       }
-      throw new Error("Invalid JSON response");
+      throw new Error("No valid JSON found");
     }
-
+    
   } catch (error) {
-    console.error("🌐 DeepSeek call failed:", {
-      error: error.message,
-      name: error.name,
-      code: error.code
-    });
+    console.error("💥 DeepSeek API call failed:", error.message);
+    console.error("Stack:", error.stack);
     
     // Fallback a análisis local
     return localCvAnalysis(inputText);
   }
 }
+
+/**
+ * Análisis local como fallback
+ */
+function localCvAnalysis(text) {
+  console.log("🔄 Using local analysis fallback");
+  
+  const textLower = (text || "").toLowerCase();
+  
+  // Industria
+  let industry = "General";
+  if (textLower.includes('react') || textLower.includes('node') || textLower.includes('javascript')) {
+    industry = "IT";
+  } else if (textLower.includes('oil') || textLower.includes('gas')) {
+    industry = "Energía";
+  }
+  
+  // Experiencia
+  let experience = 3;
+  const yearsMatch = textLower.match(/(\d+)\s*(años|years)/);
+  if (yearsMatch) experience = parseInt(yearsMatch[1]);
+  
+  // Seniority
+  let seniority = "Mid-Level";
+  if (experience >= 5) seniority = "Senior";
+  else if (experience <= 2) seniority = "Junior";
+  
+  // Skills
+  const skillsList = ['react', 'node', 'javascript', 'typescript', 'python', 'docker', 
+                     'aws', 'kubernetes', 'postgresql', 'mongodb'];
+  const detectedSkills = skillsList.filter(skill => textLower.includes(skill));
+  
+  return {
+    industry: industry,
+    role_seniority: seniority,
+    top_roles: ["Desarrollador Full Stack", "Ingeniero de Software", "Especialista Técnico"],
+    skills: detectedSkills.length > 0 ? detectedSkills : ["Habilidades técnicas"],
+    score: Math.min(10, Math.max(5, experience)),
+    red_flags: text.length < 50 ? ["CV muy breve"] : [],
+    summary: `Profesional con ${experience} años de experiencia en ${industry}. Análisis local.`,
+    next_steps: ["Para análisis más detallado, completa tu perfil en Petrolink"]
+  };
+}
+
+console.log("✅ deepseekService.js loaded successfully");
+
+module.exports = { deepseekAnalyzeCvText };
