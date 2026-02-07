@@ -1,0 +1,96 @@
+openapi: 3.0.3
+info:
+  title: Petrolink API
+  description: API de análisis de perfiles Oil & Gas
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: API funcionando
+
+  /v1/analyze/profile:
+    post:
+      summary: Analizar perfil
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                profile:
+                  type: object
+                  properties:
+                    nombre:
+                      type: string
+                    experienciaOilGas:
+                      type: string
+                    habilidades:
+                      type: array
+                      items:
+                        type: string
+                    descripcion:
+                      type: string
+      responses:
+        '200':
+          description: Análisis exitoso
+        '401':
+          description: API key inválida o ausente
+
+  /v1/search:
+    get:
+      summary: Buscar perfiles
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: skills
+          schema:
+            type: string
+        - in: query
+          name: min_score
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Resultados de búsqueda
+
+    /v1/public/analyze/cv-text:
+    post:
+      summary: Análisis público rápido por texto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cv_text:
+                  type: string
+                email:
+                  type: string
+      responses:
+        '200':
+          description: OK
+        '429':
+          description: Límite alcanzado
+        

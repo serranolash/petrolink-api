@@ -1,0 +1,18 @@
+{
+  "name": "petrolink-api",
+  "version": "1.0.0",
+  "main": "api/index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.19.2",
+    "swagger-ui-express": "^5.0.1",
+    "uuid": "^13.0.0",
+    "yamljs": "^0.3.0"
+  }
+}
