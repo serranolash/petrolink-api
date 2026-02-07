@@ -5,7 +5,31 @@ const cors = require("cors");
 
 const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
-const swaggerDocument = YAML.load("./docs/openapi.yaml");
+const path = require("path");
+const fs = require("fs");
+
+// Swagger (safe)
+let swaggerDocument = null;
+try {
+  const swaggerPath = path.join(__dirname, "..", "docs", "openapi.yaml"); // ✅ absoluto
+  if (fs.existsSync(swaggerPath)) {
+    const YAML = require("yamljs");
+    swaggerDocument = YAML.load(swaggerPath);
+  } else {
+    console.warn("⚠️ Swagger file not found:", swaggerPath);
+  }
+} catch (e) {
+  console.error("⚠️ Swagger load failed:", e);
+  swaggerDocument = null;
+}
+
+if (swaggerDocument) {
+  const swaggerUi = require("swagger-ui-express");
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+} else {
+  app.get("/docs", (req, res) => res.status(200).send("Docs not available."));
+}
+
 
 const { validateApiKey, logRequest } = require("../middleware/security.js");
 const { rateLimit } = require("../middleware/rateLimit.js");
@@ -13,11 +37,17 @@ const { checkAndConsumePublicQuota, analyzePublicCvText } = require("../services
 
 const app = express();
 
+app.get("/", (req, res) => {
+    res.json({ ok: true, service: "petrolink-api", docs: "/docs", health: "/health" });
+  });
+  
+
 app.use(cors({ origin: "*", credentials: false }));
 app.use(express.json({ limit: "5mb" }));
 
 // docs
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
 
 // health
 app.get("/health", (req, res) => {
