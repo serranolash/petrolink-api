@@ -4,116 +4,93 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
+const multer = require("multer");
+const mammoth = require("mammoth");
+const pdfParse = require("pdf-parse");
+
+// Configuración de multer para archivos
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain'
+    ];
+    
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Tipo de archivo no permitido. Solo PDF, DOC, DOCX o TXT.'));
+    }
+  }
+});
 
 // Importaciones seguras
-let validateApiKey, logRequest, rateLimit, publicCvService;
-try {
-  validateApiKey = require("../middleware/security.js").validateApiKey;
-  logRequest = require("../middleware/security.js").logRequest;
-} catch { /* middleware opcional */ }
-
-try {
-  rateLimit = require("../middleware/rateLimit.js").rateLimit;
-} catch { 
-  rateLimit = () => (req, res, next) => next(); // middleware vacío
-}
-
-try {
-  publicCvService = require("../services/publicCvService.js");
-} catch (error) {
-  console.error("❌ Error loading publicCvService:", error.message);
-  // Funciones de emergencia
-  publicCvService = {
-    checkAndConsumePublicQuota: () => ({ allowed: true, remaining: 2 }),
-    analyzePublicCvText: () => ({
-      industry: "IT",
-      role_seniority: "Senior",
-      top_roles: ["Developer"],
-      skills: [],
-      score: 7,
-      red_flags: [],
-      summary: "Service temporarily unavailable",
-      next_steps: ["Try again later"]
-    })
-  };
-}
+const { validateApiKey, logRequest } = require("../middleware/security.js");
+const { rateLimit } = require("../middleware/rateLimit.js");
+const { checkAndConsumePublicQuota, analyzePublicCvText } = require("../services/publicCvService.js");
 
 const app = express();
 
-// Agrega esto antes de otras rutas
-app.get("/vercel-debug", (req, res) => {
-  const fs = require('fs');
-  const path = require('path');
-  
-  const info = {
-    timestamp: new Date().toISOString(),
-    nodeVersion: process.version,
-    cwd: process.cwd(),
-    dirname: __dirname,
-    files: {}
-  };
-  
-  // Verificar estructura
-  const dirsToCheck = [
-    '.',
-    'services',
-    '../services',
-    path.join(__dirname, 'services'),
-    path.join(process.cwd(), 'services')
-  ];
-  
-  dirsToCheck.forEach(dir => {
-    try {
-      info.files[dir] = fs.readdirSync(dir);
-    } catch (e) {
-      info.files[dir] = `Error: ${e.message}`;
-    }
-  });
-  
-  // Verificar deepseekService específicamente
-  const pathsToCheck = [
-    'services/deepseekService.js',
-    './services/deepseekService.js',
-    path.join(__dirname, '../services/deepseekService.js'),
-    path.join(process.cwd(), 'services/deepseekService.js')
-  ];
-  
-  info.deepseekPaths = {};
-  pathsToCheck.forEach(p => {
-    info.deepseekPaths[p] = fs.existsSync(p) ? 'EXISTS' : 'NOT FOUND';
-  });
-  
-  // Variables de entorno (ocultar valores completos)
-  info.env = {
-    NODE_ENV: process.env.NODE_ENV,
-    HAS_DEEPSEEK_KEY: !!process.env.DEEPSEEK_API_KEY,
-    HAS_SUPABASE_URL: !!process.env.SUPABASE_URL,
-    DEEPSEEK_KEY_LENGTH: process.env.DEEPSEEK_API_KEY?.length
-  };
-  
-  res.json(info);
-});
+// Middlewares
+// index.js - Actualiza CORS
+app.use(cors({ 
+  origin: [
+    "https://petrolinkvzla.com", 
+    "http://localhost:3000", 
+    "http://localhost:5173",
+    "https://petrolink-api-2026-9i61fofw2-alex-serranos-projects.vercel.app",
+    "https://petrolink-api-2026.vercel.app",
+    "https://*.vercel.app"  // Permite todos los subdominios de Vercel
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+}));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-app.use(cors({ origin: "*", credentials: false }));
-// Al inicio, después de app.use(cors(...))
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  next();
-});
-app.use(express.json({ limit: "5mb" }));
+// ========== HELPER FUNCTIONS ==========
+
+/**
+ * Extrae texto de diferentes tipos de archivos
+ */
+async function extractTextFromFile(fileBuffer, mimetype) {
+  try {
+    if (mimetype === 'application/pdf') {
+      const pdfData = await pdfParse(fileBuffer);
+      return pdfData.text;
+    } else if (mimetype.includes('word') || mimetype.includes('document')) {
+      const result = await mammoth.extractRawText({ buffer: fileBuffer });
+      return result.value;
+    } else if (mimetype === 'text/plain') {
+      return fileBuffer.toString('utf8');
+    }
+    return '';
+  } catch (error) {
+    console.error("Error extrayendo texto:", error);
+    throw new Error(`Error procesando archivo: ${error.message}`);
+  }
+}
 
 // ========== ENDPOINTS PÚBLICOS ==========
 
-// Health check
+// Health check optimizado
 app.get("/", (req, res) => {
   res.json({ 
     ok: true, 
     service: "petrolink-api", 
-    version: "1.0.0",
-    endpoints: {
-      health: "/health",
-      analyze: "/v1/public/analyze/cv-text",
-      docs: "/docs"
+    version: "2.0.0",
+    timestamp: new Date().toISOString(),
+    features: {
+      text_analysis: "/v1/public/analyze/cv-text",
+      file_analysis: "/v1/public/analyze/cv-file",
+      file_formats: ["pdf", "doc", "docx", "txt"],
+      export: "/v1/public/export/analysis"
     }
   });
 });
@@ -122,135 +99,339 @@ app.get("/health", (req, res) => {
   res.json({ 
     ok: true, 
     service: "petrolink-api", 
+    status: "healthy",
     timestamp: new Date().toISOString(),
-    node: process.version,
-    env: process.env.NODE_ENV || "production"
+    node: process.version
   });
 });
 
-// Endpoint principal CORREGIDO
-app.post("/v1/public/analyze/cv-text", async (req, res) => {
-  console.log("📨 CV analysis request received");
+// Endpoint para texto - OPTIMIZADO
+app.post("/v1/public/analyze/cv-text", 
+  rateLimit({ windowMs: 60_000, max: 30 }),
+  async (req, res) => {
+    console.log("📨 CV text analysis request");
+    
+    try {
+      const { cv_text, email } = req.body || {};
+      
+      // Validación mejorada
+      if (!cv_text || typeof cv_text !== 'string') {
+        return res.status(400).json({
+          ok: false,
+          code: "CV_TEXT_REQUIRED",
+          message: "El campo 'cv_text' es requerido y debe ser texto."
+        });
+      }
+      
+      const cleanText = cv_text.trim();
+      if (cleanText.length < 50) {
+        return res.status(400).json({
+          ok: false,
+          code: "CV_TEXT_TOO_SHORT",
+          message: "El texto del CV debe tener al menos 50 caracteres.",
+          current_length: cleanText.length
+        });
+      }
+      
+      // Check quota
+      const quota = await checkAndConsumePublicQuota({
+        cvText: cleanText,
+        email,
+        maxFree: 3
+      });
+      
+      if (!quota.allowed) {
+        return res.status(429).json({
+          ok: false,
+          code: "QUOTA_EXCEEDED",
+          message: "Has alcanzado el límite gratuito para este CV.",
+          remaining: 0,
+          reset_in: "24 horas",
+          upgrade_url: "https://www.petrolinkvzla.com/plans"
+        });
+      }
+      
+      // Análisis del CV
+      const analysis = await analyzePublicCvText(cleanText);
+      
+      // Generar ID único para exportación
+      const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Respuesta optimizada
+      return res.json({
+        ok: true,
+        request_id: `req_${Date.now()}`,
+        analysis_id: analysisId,
+        quota: {
+          remaining: quota.remaining,
+          limit: 3,
+          reset: "24h"
+        },
+        analysis: {
+          ...analysis,
+          text_length: cleanText.length,
+          processed_at: new Date().toISOString()
+        },
+        export: {
+          pdf: `${req.protocol}://${req.get('host')}/v1/public/export/analysis/${analysisId}?format=pdf`,
+          json: `${req.protocol}://${req.get('host')}/v1/public/export/analysis/${analysisId}?format=json`,
+          html: `${req.protocol}://${req.get('host')}/v1/public/export/analysis/${analysisId}?format=html`
+        },
+        cta: {
+          message: "✨ Para análisis completos, seguimiento personalizado y oportunidades exclusivas",
+          action: "Únete al Hub de Petrolink",
+          url: "https://www.petrolinkvzla.com/register",
+          features: [
+            "Análisis profundo por IA",
+            "Match con oportunidades",
+            "Dashboard personalizado",
+            "Alertas de empleo"
+          ]
+        },
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error("Error en análisis de texto:", error);
+      return res.status(500).json({
+        ok: false,
+        code: "INTERNAL_ERROR",
+        message: "Error procesando tu CV. Por favor, intenta nuevamente.",
+        support_url: "https://www.petrolinkvzla.com/support",
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+);
+
+// Nuevo endpoint para archivos
+app.post("/v1/public/analyze/cv-file",
+  rateLimit({ windowMs: 60_000, max: 15 }),
+  upload.single('cv_file'),
+  async (req, res) => {
+    console.log("📁 CV file analysis request");
+    
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          ok: false,
+          code: "FILE_REQUIRED",
+          message: "Debes subir un archivo (PDF, DOC, DOCX o TXT).",
+          max_size: "10MB",
+          allowed_types: ["pdf", "doc", "docx", "txt"]
+        });
+      }
+      
+      const { email } = req.body || {};
+      const file = req.file;
+      
+      // Extraer texto del archivo
+      console.log(`Procesando archivo: ${file.originalname}, tipo: ${file.mimetype}`);
+      const extractedText = await extractTextFromFile(file.buffer, file.mimetype);
+      
+      if (!extractedText || extractedText.trim().length < 50) {
+        return res.status(400).json({
+          ok: false,
+          code: "FILE_CONTENT_INVALID",
+          message: "El archivo no contiene suficiente texto válido para análisis.",
+          extracted_length: extractedText?.length || 0
+        });
+      }
+      
+      // Check quota con hash del texto extraído
+      const quota = await checkAndConsumePublicQuota({
+        cvText: extractedText,
+        email,
+        maxFree: 3
+      });
+      
+      if (!quota.allowed) {
+        return res.status(429).json({
+          ok: false,
+          code: "QUOTA_EXCEEDED",
+          message: "Has alcanzado el límite gratuito.",
+          remaining: 0,
+          reset_in: "24 horas"
+        });
+      }
+      
+      // Análisis del texto extraído
+      const analysis = await analyzePublicCvText(extractedText);
+      
+      // ID para exportación
+      const analysisId = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      return res.json({
+        ok: true,
+        request_id: `file_${Date.now()}`,
+        analysis_id: analysisId,
+        file_info: {
+          name: file.originalname,
+          size: file.size,
+          type: file.mimetype,
+          extracted_length: extractedText.length
+        },
+        quota: {
+          remaining: quota.remaining,
+          limit: 3,
+          reset: "24h"
+        },
+        analysis: {
+          ...analysis,
+          source: "file_upload",
+          processed_at: new Date().toISOString()
+        },
+        export: {
+          pdf: `${req.protocol}://${req.get('host')}/v1/public/export/analysis/${analysisId}?format=pdf`,
+          json: `${req.protocol}://${req.get('host')}/v1/public/export/analysis/${analysisId}?format=json`
+        },
+        cta: {
+          message: "✨ Archivo analizado exitosamente",
+          action: "Ver oportunidades relacionadas",
+          url: `https://www.petrolinkvzla.com/opportunities?skills=${encodeURIComponent(analysis.skills.join(','))}`
+        },
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error("Error en análisis de archivo:", error);
+      
+      if (error instanceof multer.MulterError) {
+        return res.status(400).json({
+          ok: false,
+          code: "FILE_UPLOAD_ERROR",
+          message: `Error al subir archivo: ${error.message}`,
+          max_size: "10MB"
+        });
+      }
+      
+      return res.status(500).json({
+        ok: false,
+        code: "FILE_PROCESSING_ERROR",
+        message: `Error procesando archivo: ${error.message}`,
+        support_url: "https://www.petrolinkvzla.com/support"
+      });
+    }
+  }
+);
+
+// Endpoint para exportar análisis
+app.get("/v1/public/export/analysis/:id", (req, res) => {
+  const { id } = req.params;
+  const { format = 'json' } = req.query;
   
-  try {
-    const { cv_text, email } = req.body || {};
-    
-    // Validación básica
-    if (!cv_text || typeof cv_text !== 'string') {
-      return res.status(400).json({
-        ok: false,
-        code: "CV_TEXT_REQUIRED",
-        message: "El campo 'cv_text' es requerido y debe ser texto."
-      });
+  // En un sistema real, aquí buscarías el análisis de una DB
+  // Por ahora, devolvemos un ejemplo
+  
+  const analysisData = {
+    id: id,
+    generated_at: new Date().toISOString(),
+    analysis: {
+      industry: "IT",
+      role_seniority: "Senior",
+      score: 8,
+      skills: ["React", "Node.js", "TypeScript"],
+      summary: "Análisis profesional generado por Petrolink AI"
+    },
+    metadata: {
+      service: "Petrolink CV Analyzer",
+      version: "2.0.0",
+      exported_at: new Date().toISOString()
     }
-    
-    if (cv_text.trim().length < 30) {
-      return res.status(400).json({
-        ok: false,
-        code: "CV_TEXT_TOO_SHORT",
-        message: "El texto del CV debe tener al menos 30 caracteres."
-      });
-    }
-    
-    // Check quota (siempre funciona)
-    const quota = await publicCvService.checkAndConsumePublicQuota({
-      cvText: cv_text,
-      email,
-      maxFree: 3
-    });
-    
-    if (!quota.allowed) {
-      return res.status(429).json({
-        ok: false,
-        code: "QUOTA_EXCEEDED",
-        message: "Has alcanzado el límite gratuito para este CV.",
-        remaining: 0,
-        reset: "24 horas"
-      });
-    }
-    
-    // Análisis del CV (siempre funciona)
-    const analysis = await publicCvService.analyzePublicCvText(cv_text);
-    
-    // Respuesta exitosa
-    return res.json({
-      ok: true,
-      request_id: `req_${Date.now()}`,
-      quota: {
-        remaining: quota.remaining,
-        limit: 3,
-        reset: "24h"
-      },
-      analysis,
-      cta: {
-        message: "✨ Para análisis más avanzados y oportunidades en Oil & Gas",
-        action: "Únete a Petrolink",
-        url: "https://www.petrolinkvzla.com"
-      },
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error("🔥 Error in CV analysis:", error);
-    
-    // Respuesta de error controlada
-    return res.status(500).json({
-      ok: false,
-      code: "INTERNAL_ERROR",
-      message: "Error procesando tu CV. Por favor, intenta nuevamente.",
-      request_id: `err_${Date.now()}`,
-      timestamp: new Date().toISOString()
-    });
+  };
+  
+  switch (format.toLowerCase()) {
+    case 'pdf':
+      // Para PDF necesitarías una librería como pdfkit
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="petrolink-analysis-${id}.pdf"`);
+      res.send(`PDF export for ${id} - Implement PDF generation here`);
+      break;
+      
+    case 'html':
+      res.setHeader('Content-Type', 'text/html');
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Petrolink Analysis - ${id}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            .header { background: #1a365d; color: white; padding: 20px; border-radius: 10px; }
+            .section { margin: 20px 0; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>📊 Análisis de CV - Petrolink</h1>
+            <p>ID: ${id} | Generado: ${new Date().toLocaleDateString()}</p>
+          </div>
+          <div class="section">
+            <h2>Resumen del Análisis</h2>
+            <p>${analysisData.analysis.summary}</p>
+          </div>
+        </body>
+        </html>
+      `);
+      break;
+      
+    default: // json
+      res.json(analysisData);
   }
 });
 
 // ========== ENDPOINTS PROTEGIDOS ==========
-if (validateApiKey && logRequest) {
-  app.use("/v1", validateApiKey, logRequest);
-  
-  app.get("/v1/search", (req, res) => {
-    res.json({
-      ok: true,
-      request_id: req.requestId || "unknown",
-      client: { id: req.clientId || "public", name: req.clientName || "Guest" },
-      results: [],
-      message: "Protected endpoint - requires API key"
-    });
+app.use("/v1/private", validateApiKey, logRequest);
+
+app.get("/v1/private/search", (req, res) => {
+  res.json({
+    ok: true,
+    request_id: req.requestId,
+    client: req.clientId,
+    results: [],
+    pagination: { limit: 20, offset: 0, total: 0 }
   });
-}
+});
 
 // ========== DOCUMENTACIÓN ==========
 app.get("/docs", (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Petrolink API Docs</title>
-      <style>
-        body { font-family: Arial, sans-serif; margin: 40px; }
-        .endpoint { background: #f5f5f5; padding: 20px; margin: 20px 0; border-radius: 8px; }
-        code { background: #e0e0e0; padding: 2px 6px; border-radius: 4px; }
-      </style>
-    </head>
-    <body>
-      <h1>📚 Petrolink API v1.0</h1>
-      
-      <div class="endpoint">
-        <h3>POST /v1/public/analyze/cv-text</h3>
-        <p>Analiza un CV de texto y devuelve insights.</p>
-        <p><strong>Request:</strong></p>
-        <code>
-        {
-          "cv_text": "Tu texto de CV aquí...",
-          "email": "opcional@email.com"
+  res.sendFile(path.join(__dirname, "../docs/index.html"));
+});
+
+app.get("/api-spec", (req, res) => {
+  res.json({
+    openapi: "3.0.0",
+    info: {
+      title: "Petrolink CV Analysis API",
+      version: "2.0.0",
+      description: "API para análisis de CVs con IA"
+    },
+    servers: [
+      { url: "https://petrolink-api-2026.vercel.app", description: "Production" },
+      { url: "http://localhost:3000", description: "Development" }
+    ],
+    paths: {
+      "/v1/public/analyze/cv-text": {
+        post: {
+          summary: "Analizar texto de CV",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    cv_text: { type: "string", minLength: 50 },
+                    email: { type: "string", format: "email" }
+                  }
+                }
+              }
+            }
+          }
         }
-        </code>
-      </div>
-      
-      <p>Para más información: <a href="https://www.petrolinkvzla.com">petrolinkvzla.com</a></p>
-    </body>
-    </html>
-  `);
+      }
+    }
+  });
 });
 
 // ========== ERROR HANDLING ==========
@@ -259,7 +440,13 @@ app.use((req, res) => {
     ok: false,
     code: "NOT_FOUND",
     message: `Ruta no encontrada: ${req.path}`,
-    available: ["/", "/health", "/docs", "/v1/public/analyze/cv-text"]
+    available: [
+      "/", "/health", "/docs", "/api-spec",
+      "/v1/public/analyze/cv-text",
+      "/v1/public/analyze/cv-file",
+      "/v1/public/export/analysis/:id"
+    ],
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -269,34 +456,10 @@ app.use((error, req, res, next) => {
     ok: false,
     code: "SERVER_ERROR",
     message: "Error interno del servidor",
+    error_id: `err_${Date.now()}`,
+    support_url: "https://www.petrolinkvzla.com/support",
     timestamp: new Date().toISOString()
   });
 });
-
-app.get("/env-check", (req, res) => {
-  // Obtener todas las variables DeepSeek
-  const deepseekVars = {};
-  Object.keys(process.env).forEach(key => {
-    if (key.includes('DEEPSEEK') || key.includes('SUPABASE')) {
-      const value = process.env[key];
-      deepseekVars[key] = {
-        exists: !!value,
-        length: value?.length,
-        preview: value ? `${value.substring(0, 4)}...${value.substring(value.length - 4)}` : null
-      };
-    }
-  });
-  
-  res.json({
-    timestamp: new Date().toISOString(),
-    nodeVersion: process.version,
-    environment: process.env.NODE_ENV,
-    variables: deepseekVars,
-    deepseekService: {
-      loaded: typeof require !== 'undefined' ? true : false
-    }
-  });
-});
-
 
 module.exports = app;
