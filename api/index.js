@@ -408,37 +408,56 @@ app.get("/v1/private/search", (req, res) => {
   });
 });
 
-// ========== DOCUMENTACIÓN ==========
-app.get("/docs", (req, res) => {
-  res.sendFile(path.join(__dirname, "../docs/index.html"));
-});
-
-app.get("/api-spec", (req, res) => {
-  res.json({
-    openapi: "3.0.0",
-    info: {
-      title: "Petrolink CV Analysis API",
-      version: "2.0.0",
-      description: "API para análisis de CVs con IA"
+// 1. Definimos la especificación como una constante (Fuente única de verdad)
+const apiSpec = {
+  openapi: "3.0.0",
+  info: {
+    title: "Petrolink CV Analysis API",
+    version: "2.0.0",
+    description: "API para análisis de CVs con IA para la reinserción laboral en Venezuela y LATAM."
+  },
+  servers: [
+    { url: "https://petrolink-api.vercel.app", description: "Production" },
+    { url: "http://localhost:3000", description: "Development" }
+  ],
+  paths: {
+    "/v1/public/analyze/cv-text": {
+      post: {
+        summary: "Analizar texto de CV",
+        tags: ["Público"],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  cv_text: { type: "string", minLength: 50, description: "Contenido del CV en texto plano" },
+                  email: { type: "string", format: "email", description: "Email para control de cuota" }
+                },
+                required: ["cv_text", "email"]
+              }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "Análisis completado exitosamente" },
+          "429": { description: "Cuota de análisis gratuitos superada" }
+        }
+      }
     },
-    servers: [
-      { url: "https://petrolink-api-2026.vercel.app", description: "Production" },
-      { url: "http://localhost:3000", description: "Development" }
-    ],
-    paths: {
-      "/v1/public/analyze/cv-text": {
-        post: {
-          summary: "Analizar texto de CV",
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    cv_text: { type: "string", minLength: 50 },
-                    email: { type: "string", format: "email" }
-                  }
+    "/v1/public/analyze/cv-file": {
+      post: {
+        summary: "Analizar archivo de CV (PDF/DOCX)",
+        tags: ["Público"],
+        requestBody: {
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                properties: {
+                  cv_file: { type: "string", format: "binary" },
+                  email: { type: "string", format: "email" }
                 }
               }
             }
@@ -446,8 +465,17 @@ app.get("/api-spec", (req, res) => {
         }
       }
     }
-  });
+  }
+};
+
+// 2. Ruta para el JSON técnico (reemplaza la anterior)
+app.get("/api-spec", (req, res) => {
+  res.json(apiSpec);
 });
+
+// 3. Ruta para la documentación visual de Swagger
+const swaggerUi = require('swagger-ui-express');
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(apiSpec));
 
 // ========== ERROR HANDLING ==========
 app.use((req, res) => {
