@@ -1,12 +1,9 @@
 ﻿{
   "version": 2,
   "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index-wrapper" }
-  ],
-  "functions": {
-    "api/index-wrapper.js": {
-      "memory": 1024,
-      "maxDuration": 10
+    {
+      "source": "/(.*)",
+      "destination": "/api/index-wrapper"
     }
-  }
+  ]
 }
