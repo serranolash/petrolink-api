@@ -1,4 +1,7 @@
-require("dotenv").config();
+if (!process.env.VERCEL) {
+  require("dotenv").config();
+}
+
 
 const express = require("express");
 const cors = require("cors");
@@ -46,7 +49,8 @@ app.use(cors({
 }));
 
 // Manejar preflight OPTIONS
-app.options('*', cors());
+app.options('/*', cors());
+
 
 // O manejar específicamente:
 app.use((req, res, next) => {
