@@ -49,7 +49,8 @@ app.use(cors({
 }));
 
 // Manejar preflight OPTIONS
-app.options('/*', cors());
+// Preflight OPTIONS se maneja en el middleware de abajo
+
 
 
 // O manejar específicamente:
