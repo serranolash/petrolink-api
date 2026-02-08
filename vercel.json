@@ -1,7 +1,0 @@
-﻿{
-    "rewrites": [
-      { "source": "/v1/:path*", "destination": "/api/index.js" }
-    ]
-  }
-
-  
