@@ -2,7 +2,6 @@ if (!process.env.VERCEL) {
   require("dotenv").config();
 }
 
-
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -50,8 +49,6 @@ app.use(cors({
 
 // Manejar preflight OPTIONS
 // Preflight OPTIONS se maneja en el middleware de abajo
-
-
 
 // O manejar específicamente:
 app.use((req, res, next) => {
@@ -468,14 +465,24 @@ const apiSpec = {
   }
 };
 
-// 2. Ruta para el JSON técnico (reemplaza la anterior)
-app.get("/api-spec", (req, res) => {
-  res.json(apiSpec);
-});
-
-// 3. Ruta para la documentación visual de Swagger
 const swaggerUi = require('swagger-ui-express');
-app.use('/docs', swaggerUi.serve, swaggerUi.setup(apiSpec));
+
+// Opciones para forzar la carga desde CDN y evitar el error de sintaxis en Vercel
+const swaggerOptions = {
+  customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css',
+  customJs: [
+    'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.js'
+  ]
+};
+
+// ========== DOCUMENTACIÓN UNIFICADA (EVITA TIMEOUTS VERCEL) ==========
+
+// 1. Ruta para el JSON técnico
+app.get("/api-spec", (req, res) => res.json(apiSpec));
+
+// 2. Ruta para la documentación visual (Unificada para evitar timeouts en Vercel)
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(apiSpec, swaggerOptions));
 
 // ========== ERROR HANDLING ==========
 app.use((req, res) => {
@@ -483,12 +490,7 @@ app.use((req, res) => {
     ok: false,
     code: "NOT_FOUND",
     message: `Ruta no encontrada: ${req.path}`,
-    available: [
-      "/", "/health", "/docs", "/api-spec",
-      "/v1/public/analyze/cv-text",
-      "/v1/public/analyze/cv-file",
-      "/v1/public/export/analysis/:id"
-    ],
+    available: ["/", "/health", "/docs", "/api-spec", "/v1/public/analyze/cv-text"],
     timestamp: new Date().toISOString()
   });
 });
