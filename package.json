@@ -1,10 +1,10 @@
 {
   "name": "petrolink-api",
   "version": "1.0.0",
-  "main": "api/index-wrapper.js",
+  "main": "api/index.js",
   "scripts": {
-    "dev": "vercel dev",
-    "start": "node api/index-wrapper.js"
+    "start": "node api/index.js",
+    "dev": "vercel dev"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
