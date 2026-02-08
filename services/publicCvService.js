@@ -98,14 +98,38 @@ async function checkAndConsumePublicQuota({ cvText, email, maxFree = 3 }) {
   const clean = normalizeText(cvText);
   const cvHash = sha256(clean);
   const shortHash = cvHash.substring(0, 12);
-  
-  console.log(`📊 Quota check - Hash: ${shortHash}, Length: ${clean.length}`);
-  
+
+  // Bucket diario (reinicia cada día)
+  const dayKey = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const identity = (email && String(email).trim().toLowerCase()) ? String(email).trim().toLowerCase() : "anon";
+
+  // Cuota por día y por identidad (email)
+  const key = `${dayKey}:${identity}`;
+
+  const entry = quotaMemory.get(key) || { count: 0 };
+
+  console.log(`📊 Quota check - Key: ${key}, Count: ${entry.count}, Hash: ${shortHash}, Length: ${clean.length}`);
+
+  // Si ya alcanzó el máximo, bloquear sin consumir
+  if (entry.count >= maxFree) {
+    return {
+      cv_hash: shortHash,
+      allowed: false,
+      remaining: 0,
+      count: entry.count,
+      max_free: maxFree
+    };
+  }
+
+  // Consumir 1
+  entry.count += 1;
+  quotaMemory.set(key, entry);
+
   return {
     cv_hash: shortHash,
     allowed: true,
-    remaining: maxFree - 1,
-    count: 1,
+    remaining: Math.max(0, maxFree - entry.count),
+    count: entry.count,
     max_free: maxFree
   };
 }
