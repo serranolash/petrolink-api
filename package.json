@@ -4,14 +4,16 @@
   "main": "api/index.js",
   "scripts": {
     "dev": "vercel dev",
-    "test": "node --test"
+    "start": "node api/index.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
-    "axios": "^1.13.4",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
+    "mammoth": "^1.11.0",
+    "multer": "^2.0.2",
+    "pdf-parse": "^2.4.5",
     "swagger-ui-express": "^5.0.1",
     "yamljs": "^0.3.0"
   },
