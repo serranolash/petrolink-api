@@ -1,7 +1,7 @@
 {
   "name": "petrolink-api",
   "version": "1.0.0",
-  "main": "api/index.js",
+  "main": "api/index-wrapper.js",
   "scripts": {
     "dev": "vercel dev",
     "start": "node api/index.js"
